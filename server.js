@@ -1,7 +1,7 @@
+
+
 import dotenv from "dotenv";
 dotenv.config();
-
-import config from 'config';
 
 import jsonServer from "json-server";
 import path from "path";
@@ -12,13 +12,14 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { LowSync } from "lowdb";
 import { JSONFileSync } from "lowdb/node";
-import express from "express";
+import config from "./config.js";
+const { serverPort, frontendPort, protectedRoutes } = config;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uid = new ShortUniqueId({ length: 10 });
 
-const file = path.join(__dirname, config.get('db'));
+const file = path.join(__dirname, 'db.json');
 const adapter = new JSONFileSync(file);
 const db = new LowSync(adapter);
 // db.read();
@@ -26,27 +27,20 @@ const db = new LowSync(adapter);
 // db.write();
 
 const server = jsonServer.create();
-const router = jsonServer.router(join(__dirname, config.get('db')));
-const middlewares = jsonServer.defaults();
+// foreign key suffix as second parameter to the module. Below code sets it to dummy
+// it fixes delete problem but causes expansion problems.
+const router = jsonServer.router(join(__dirname, 'db.json'),{
+  foreignKeySuffix: 'dummy'
+});
+
+
+const staticDir = path.join(__dirname, 'server-files');
+const middlewares = jsonServer.defaults({static: staticDir});
 
 server.use(middlewares);
 server.use(jsonServer.bodyParser);
-server.use(express.static("public"));
+// server.use(express.static("public"));
 
-// config
-const protectedRoutes = [
-  { route: "/users", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/posts", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/comments", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/photos", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/todos", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/recipeCategories", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/recipeIngredients", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/recipes", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/areas", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/recipeTags", methods: ["POST", "PUT", "DELETE", "PATCH"] },
-  { route: "/orders", methods: ["GET", "POST", "PUT", "DELETE", "PATCH"] },
-];
 
 // Authorization logic
 server.use((req, res, next) => {
@@ -55,7 +49,9 @@ server.use((req, res, next) => {
   for (let i = 0; i < protectedRoutes.length; i++) {
     let { route, methods } = protectedRoutes[i];
 
-    if (route === req.url) {
+    // if ((route === 'GET' && ))
+
+    if ((req.url).startsWith(route)) {
       if (methods.includes(req.method)) {
         NeedsAuthorization = true;
         break;
@@ -171,7 +167,7 @@ server.post("/user/login", (req, res) => {
 });
 
 function generateAccessToken(user) {
-  return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "6h" });
+  return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "3h" });
 }
 
 // To modify responses, overwrite router.render method:
@@ -184,11 +180,8 @@ function generateAccessToken(user) {
 
 server.use(router);
 
-
-const PORT = process.env.NODE_ENV == 'development' ? `http://localhost:${config.get('port')}/` : `PORT: ${config.get('port')}`
-
-server.listen(9999, () => {
+server.listen( serverPort, () => {
   console.log(
-    `JSON Server is running at ${PORT} in ${process.env.NODE_ENV} ENV.`
+    `JSON Server is running at http://localhost:${serverPort}`
   );
 });
